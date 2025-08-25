@@ -145,14 +145,23 @@ export const useVitalsData = () => {
     }
   }
 
-  // Start polling
+  // Start with empty data - only show real camera measurements
   useEffect(() => {
-    // Initial fetch
-    fetchVitalsData()
-    
-    // Set up polling interval
-    intervalRef.current = setInterval(fetchVitalsData, 5000) // Poll every 5 seconds
-    
+    // Set initial empty state
+    setVitalsData({
+      heartRate: 0,
+      spo2: 0,
+      hrv: 0,
+      timestamp: Date.now(),
+      heartRateTrend: 0,
+      spo2Trend: 0,
+      hrvTrend: 0
+    })
+    setRiskLevel('low')
+    setIsLoading(false)
+
+    // Don't start automatic polling - wait for real camera data
+
     // Cleanup
     return () => {
       if (intervalRef.current) {
@@ -181,6 +190,23 @@ export const useVitalsData = () => {
     }
   }
 
+  // Update vitals with real camera data
+  const updateVitalsFromCamera = (heartRate) => {
+    const newData = {
+      heartRate: heartRate,
+      spo2: 0, // Camera can't detect SpO2
+      hrv: 0,  // Camera can't detect HRV
+      timestamp: Date.now(),
+      heartRateTrend: previousData ? heartRate - previousData.heartRate : 0,
+      spo2Trend: 0,
+      hrvTrend: 0
+    }
+
+    setPreviousData(vitalsData)
+    setVitalsData(newData)
+    setRiskLevel(calculateRiskLevel(newData))
+  }
+
   return {
     vitalsData,
     previousData,
@@ -189,6 +215,7 @@ export const useVitalsData = () => {
     riskLevel,
     refreshData,
     toggleMonitoring,
+    updateVitalsFromCamera,
     isMonitoring: !!intervalRef.current
   }
 }

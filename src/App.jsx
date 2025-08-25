@@ -3,11 +3,23 @@ import Landing from './components/Landing'
 import VitalsDashboard from './components/VitalsDashboard'
 import VitalsChart from './components/VitalsChart'
 import RiskAlert from './components/RiskAlert'
+import CameraHeartRate from './components/CameraHeartRate'
+import SimpleCameraTest from './components/SimpleCameraTest'
+import BasicCameraTest from './components/BasicCameraTest'
+import SuperSimpleHeartRate from './components/SuperSimpleHeartRate'
+import DebugCameraTest from './components/DebugCameraTest'
 import { useVitalsData } from './hooks/useVitalsData'
 
 function App() {
   const [currentView, setCurrentView] = useState('landing')
-  const { vitalsData, riskLevel, isLoading } = useVitalsData()
+  const [realHeartRate, setRealHeartRate] = useState(null)
+  const { vitalsData, riskLevel, isLoading, updateVitalsFromCamera } = useVitalsData()
+
+  const handleHeartRateDetected = (heartRate) => {
+    setRealHeartRate(heartRate)
+    updateVitalsFromCamera(heartRate) // Update dashboard with real data
+    console.log('Real heart rate detected:', heartRate)
+  }
 
   return (
     <div className="min-h-screen gradient-bg">
@@ -37,10 +49,25 @@ function App() {
             {/* Dashboard Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Vitals Cards */}
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-2 space-y-8">
                 <VitalsDashboard vitalsData={vitalsData} isLoading={isLoading} />
+
+                {/* Debug Camera Test - Use this to troubleshoot! */}
+                <DebugCameraTest />
+
+                {/* Super Simple Heart Rate - Try this first! */}
+                <SuperSimpleHeartRate onHeartRateDetected={handleHeartRateDetected} />
+
+                {/* Basic Camera Test - Start here */}
+                <BasicCameraTest />
+
+                {/* Simple Camera Test - Try this first */}
+                <SimpleCameraTest onHeartRateDetected={handleHeartRateDetected} />
+
+                {/* Advanced Camera Heart Rate Detection */}
+                <CameraHeartRate onHeartRateDetected={handleHeartRateDetected} />
               </div>
-              
+
               {/* Chart */}
               <div className="lg:col-span-1">
                 <VitalsChart vitalsData={vitalsData} />
