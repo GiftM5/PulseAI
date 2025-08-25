@@ -92,7 +92,7 @@ export const useVitalsData = () => {
       setError(null)
       
       // Try to fetch from FastAPI backend
-      const response = await fetch('http://127.0.0.1:8000/api/vitals', {
+      const response = await fetch('http://192.168.0.174:8000/api/vitals', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
