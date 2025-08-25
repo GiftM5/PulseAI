@@ -52,9 +52,6 @@ function App() {
               <div className="lg:col-span-2 space-y-8">
                 <VitalsDashboard vitalsData={vitalsData} isLoading={isLoading} />
 
-                {/* Debug Camera Test - Use this to troubleshoot! */}
-                <DebugCameraTest />
-
                 {/* Super Simple Heart Rate - Try this first! */}
                 <SuperSimpleHeartRate onHeartRateDetected={handleHeartRateDetected} />
 
