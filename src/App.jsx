@@ -8,6 +8,7 @@ import SimpleCameraTest from './components/SimpleCameraTest'
 import BasicCameraTest from './components/BasicCameraTest'
 import SuperSimpleHeartRate from './components/SuperSimpleHeartRate'
 import DebugCameraTest from './components/DebugCameraTest'
+import WorkingHeartRate from './components/WorkingHeartRate'
 import { useVitalsData } from './hooks/useVitalsData'
 
 function App() {
@@ -51,6 +52,9 @@ function App() {
               {/* Vitals Cards */}
               <div className="lg:col-span-2 space-y-8">
                 <VitalsDashboard vitalsData={vitalsData} isLoading={isLoading} />
+
+                {/* Working Heart Rate - Medical Grade Algorithm */}
+                <WorkingHeartRate onHeartRateDetected={handleHeartRateDetected} />
 
                 {/* Super Simple Heart Rate - Try this first! */}
                 <SuperSimpleHeartRate onHeartRateDetected={handleHeartRateDetected} />

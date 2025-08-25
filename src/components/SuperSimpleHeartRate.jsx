@@ -82,40 +82,34 @@ const SuperSimpleHeartRate = ({ onHeartRateDetected }) => {
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    // Get center area
-    const centerX = canvas.width / 2
-    const centerY = canvas.height / 2
-    const size = 100 // Fixed size area
-
     try {
-      const imageData = ctx.getImageData(
-        centerX - size/2, 
-        centerY - size/2, 
-        size, 
-        size
-      )
-
-      // Just get average red value - super simple
-      let redSum = 0
+      // Get the entire frame - not just center
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const pixels = imageData.data
-      
-      for (let i = 0; i < pixels.length; i += 4) {
-        redSum += pixels[i] // Red channel only
+
+      // Calculate average red intensity across entire frame
+      let redSum = 0
+      let pixelCount = 0
+
+      // Sample every 4th pixel for performance (still very accurate)
+      for (let i = 0; i < pixels.length; i += 16) { // Skip 4 pixels each time
+        redSum += pixels[i] // Red channel
+        pixelCount++
       }
 
-      const avgRed = redSum / (pixels.length / 4)
+      const avgRed = redSum / pixelCount
       setRedValue(Math.round(avgRed))
-      
-      // Store with timestamp
+
+      // Store with high precision timestamp
       dataRef.current.push({
-        time: Date.now(),
+        time: performance.now(), // More precise than Date.now()
         red: avgRed
       })
-      
+
       setDataPoints(dataRef.current.length)
-      
-      // Log every 20 frames
-      if (dataRef.current.length % 20 === 0) {
+
+      // Log every 10 frames to see the signal
+      if (dataRef.current.length % 10 === 0) {
         console.log(`📊 Frame ${dataRef.current.length}: Red = ${Math.round(avgRed)}`)
       }
 
@@ -153,13 +147,13 @@ const SuperSimpleHeartRate = ({ onHeartRateDetected }) => {
     dataRef.current = []
     setDataPoints(0)
     
-    // Analyze frames every 200ms (5 FPS)
-    intervalRef.current = setInterval(analyzeFrame, 200)
-    
-    // Stop after 15 seconds
+    // Analyze frames every 100ms (10 FPS) - higher sampling rate
+    intervalRef.current = setInterval(analyzeFrame, 100)
+
+    // Stop after 20 seconds - longer for better accuracy
     setTimeout(() => {
       finishMeasurement()
-    }, 15000)
+    }, 20000)
   }
 
   const finishMeasurement = () => {
@@ -180,7 +174,7 @@ const SuperSimpleHeartRate = ({ onHeartRateDetected }) => {
       return
     }
 
-    // Enhanced analysis with multiple methods
+    // SIMPLE AND PROVEN ALGORITHM - like other working apps
     const redValues = data.map(d => d.red)
     const timestamps = data.map(d => d.time)
     const min = Math.min(...redValues)
@@ -188,46 +182,70 @@ const SuperSimpleHeartRate = ({ onHeartRateDetected }) => {
     const avg = redValues.reduce((a, b) => a + b) / redValues.length
     const variation = max - min
 
-    console.log('📊 Signal stats:', {
+    console.log('📊 Raw signal data:', {
       min: min.toFixed(1),
       max: max.toFixed(1),
       avg: avg.toFixed(1),
       variation: variation.toFixed(1),
-      dataPoints: data.length
+      dataPoints: data.length,
+      firstFew: redValues.slice(0, 10).map(v => Math.round(v)),
+      lastFew: redValues.slice(-10).map(v => Math.round(v))
     })
 
-    // Method 1: Peak detection (most accurate)
-    let heartRate = detectHeartRateByPeaks(redValues, timestamps)
-    let confidence = 'Peak Detection'
-    let method = 'peaks'
-
-    // Method 2: Frequency analysis if peaks fail
-    if (!heartRate) {
-      heartRate = detectHeartRateByFrequency(redValues, timestamps)
-      confidence = 'Frequency Analysis'
-      method = 'frequency'
+    // Simple moving average to smooth signal
+    const smoothed = []
+    const windowSize = 5
+    for (let i = windowSize; i < redValues.length - windowSize; i++) {
+      let sum = 0
+      for (let j = i - windowSize; j <= i + windowSize; j++) {
+        sum += redValues[j]
+      }
+      smoothed.push(sum / (windowSize * 2 + 1))
     }
 
-    // Method 3: Autocorrelation (new method)
-    if (!heartRate) {
-      heartRate = detectHeartRateByAutocorrelation(redValues, timestamps)
-      confidence = 'Autocorrelation'
-      method = 'autocorr'
+    console.log('📈 Smoothed signal:', smoothed.slice(0, 10).map(v => Math.round(v)))
+
+    // Find peaks in smoothed signal
+    const peaks = []
+    const threshold = Math.min(...smoothed) + (Math.max(...smoothed) - Math.min(...smoothed)) * 0.6
+
+    for (let i = 2; i < smoothed.length - 2; i++) {
+      if (smoothed[i] > smoothed[i-1] &&
+          smoothed[i] > smoothed[i+1] &&
+          smoothed[i] > smoothed[i-2] &&
+          smoothed[i] > smoothed[i+2] &&
+          smoothed[i] > threshold) {
+        peaks.push(i + windowSize) // Adjust for smoothing offset
+      }
     }
 
-    // Method 4: Simple variation-based (fallback)
-    if (!heartRate && variation > 3) {
-      heartRate = Math.round(60 + (variation / 5) * 20) // 60-80 BPM based on signal strength
-      confidence = 'Signal Variation'
-      method = 'variation'
+    console.log('🔍 Found peaks:', peaks.length, 'at positions:', peaks)
+
+    let heartRate = null
+    let method = 'none'
+
+    // Calculate heart rate from peaks
+    if (peaks.length >= 3) {
+      const intervals = []
+      for (let i = 1; i < peaks.length; i++) {
+        const timeDiff = (timestamps[peaks[i]] - timestamps[peaks[i-1]]) / 1000 // seconds
+        if (timeDiff > 0.4 && timeDiff < 2.0) { // 30-150 BPM range
+          intervals.push(60 / timeDiff)
+        }
+      }
+
+      if (intervals.length >= 2) {
+        // Use median to avoid outliers
+        intervals.sort((a, b) => a - b)
+        const median = intervals[Math.floor(intervals.length / 2)]
+        if (median >= 40 && median <= 150) {
+          heartRate = Math.round(median)
+          method = 'peak-detection'
+        }
+      }
     }
 
-    // Method 5: Last resort - any detectable signal
-    if (!heartRate && variation > 1) {
-      heartRate = Math.round(70 + Math.random() * 15) // 70-85 BPM
-      confidence = 'Minimal Signal'
-      method = 'minimal'
-    }
+    console.log('💓 Heart rate calculation:', { heartRate, method, peakCount: peaks.length })
 
     if (heartRate) {
       console.log('✅ Heart rate detected:', heartRate, 'BPM using', method)
@@ -265,139 +283,7 @@ const SuperSimpleHeartRate = ({ onHeartRateDetected }) => {
     stopCamera()
   }
 
-  // Heart rate detection methods
-  const detectHeartRateByPeaks = (values, timestamps) => {
-    if (values.length < 30) return null
-
-    // Smooth the signal using moving average
-    const smoothed = []
-    const windowSize = 3
-    for (let i = windowSize; i < values.length - windowSize; i++) {
-      let sum = 0
-      for (let j = i - windowSize; j <= i + windowSize; j++) {
-        sum += values[j]
-      }
-      smoothed.push(sum / (windowSize * 2 + 1))
-    }
-
-    // Find peaks using adaptive threshold
-    const mean = smoothed.reduce((a, b) => a + b) / smoothed.length
-    const std = Math.sqrt(smoothed.reduce((a, b) => a + (b - mean) ** 2, 0) / smoothed.length)
-    const threshold = mean + std * 0.5 // Adaptive threshold
-
-    const peaks = []
-    for (let i = 2; i < smoothed.length - 2; i++) {
-      if (smoothed[i] > smoothed[i - 1] &&
-          smoothed[i] > smoothed[i + 1] &&
-          smoothed[i] > threshold &&
-          smoothed[i] > smoothed[i - 2] &&
-          smoothed[i] > smoothed[i + 2]) {
-        peaks.push(i + windowSize) // Adjust for smoothing offset
-      }
-    }
-
-    console.log('🔍 Peak detection:', { peaks: peaks.length, threshold: threshold.toFixed(1), mean: mean.toFixed(1) })
-
-    if (peaks.length < 3) return null
-
-    // Calculate intervals between peaks
-    const intervals = []
-    for (let i = 1; i < peaks.length; i++) {
-      const timeDiff = (timestamps[peaks[i]] - timestamps[peaks[i - 1]]) / 1000 // seconds
-      if (timeDiff > 0.4 && timeDiff < 2.5) { // Reasonable heart rate range (24-150 BPM)
-        intervals.push(60 / timeDiff) // Convert to BPM
-      }
-    }
-
-    if (intervals.length < 2) return null
-
-    // Use median to avoid outliers
-    intervals.sort((a, b) => a - b)
-    const median = intervals[Math.floor(intervals.length / 2)]
-
-    console.log('💓 Peak intervals (BPM):', intervals.map(i => Math.round(i)), 'Median:', Math.round(median))
-
-    if (median >= 40 && median <= 150) {
-      return Math.round(median)
-    }
-
-    return null
-  }
-
-  const detectHeartRateByFrequency = (values, timestamps) => {
-    if (values.length < 40) return null
-
-    // Remove DC component (mean)
-    const mean = values.reduce((a, b) => a + b) / values.length
-    const detrended = values.map(v => v - mean)
-
-    // Count zero crossings (simplified frequency analysis)
-    let crossings = 0
-    for (let i = 1; i < detrended.length; i++) {
-      if ((detrended[i - 1] < 0 && detrended[i] >= 0) ||
-          (detrended[i - 1] >= 0 && detrended[i] < 0)) {
-        crossings++
-      }
-    }
-
-    const duration = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000 // seconds
-    const frequency = (crossings / 2) / duration // Hz (each heartbeat creates 2 crossings)
-    const bpm = frequency * 60
-
-    console.log('🌊 Frequency analysis:', { crossings, duration: duration.toFixed(1), frequency: frequency.toFixed(2), bpm: bpm.toFixed(1) })
-
-    if (bpm >= 40 && bpm <= 150) {
-      return Math.round(bpm)
-    }
-
-    return null
-  }
-
-  const detectHeartRateByAutocorrelation = (values, timestamps) => {
-    if (values.length < 50) return null
-
-    // Simple autocorrelation to find periodic patterns
-    const mean = values.reduce((a, b) => a + b) / values.length
-    const normalized = values.map(v => v - mean)
-
-    let maxCorr = 0
-    let bestLag = 0
-
-    // Check lags corresponding to 40-150 BPM
-    const minLag = Math.floor(values.length * 0.4 / 15) // ~150 BPM
-    const maxLag = Math.floor(values.length * 1.5 / 15) // ~40 BPM
-
-    for (let lag = minLag; lag < Math.min(maxLag, values.length / 2); lag++) {
-      let correlation = 0
-      let count = 0
-
-      for (let i = 0; i < values.length - lag; i++) {
-        correlation += normalized[i] * normalized[i + lag]
-        count++
-      }
-
-      correlation /= count
-
-      if (correlation > maxCorr) {
-        maxCorr = correlation
-        bestLag = lag
-      }
-    }
-
-    if (maxCorr > 0.1 && bestLag > 0) { // Minimum correlation threshold
-      const duration = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000
-      const period = (bestLag / values.length) * duration // seconds per beat
-      const bpm = 60 / period
-
-      console.log('🔄 Autocorrelation:', { maxCorr: maxCorr.toFixed(3), bestLag, period: period.toFixed(2), bpm: bpm.toFixed(1) })
-
-      if (bpm >= 40 && bpm <= 150) {
-        return Math.round(bpm)
-      }
-    }
-
-    return null
-  }
+  // Keep it simple - no complex methods
 
   return (
     <div className="glass-card p-6 rounded-xl space-y-4">
@@ -425,9 +311,9 @@ const SuperSimpleHeartRate = ({ onHeartRateDetected }) => {
         
         {isRecording && (
           <div className="absolute top-2 left-2 right-2 bg-red-500/80 text-white p-2 rounded text-center">
-            <div>🔴 Recording... Keep finger on camera!</div>
+            <div>💓 Detecting heartbeat... Keep finger steady!</div>
             <div className="text-sm mt-1">
-              Red: {redValue} | Points: {dataPoints} | Time: {Math.floor(dataPoints / 5)}s
+              Red: {redValue} | Points: {dataPoints} | Time: {Math.floor(dataPoints / 10)}s
             </div>
           </div>
         )}
@@ -440,7 +326,7 @@ const SuperSimpleHeartRate = ({ onHeartRateDetected }) => {
             onClick={startMeasurement}
             className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium"
           >
-            🚀 Test Heart Rate (15s)
+            💓 Detect Heart Rate (20s)
           </button>
         ) : (
           <button
@@ -461,13 +347,14 @@ const SuperSimpleHeartRate = ({ onHeartRateDetected }) => {
       
       {/* Simple Instructions */}
       <div className="bg-dark-800/30 rounded-lg p-4 text-sm">
-        <div className="font-medium text-white mb-2">📋 Instructions:</div>
+        <div className="font-medium text-white mb-2">💓 Heart Rate Detection:</div>
         <div className="text-dark-300 space-y-1">
-          <div>1. Click "Test Heart Rate"</div>
-          <div>2. <strong>Completely cover the camera with your fingertip</strong></div>
-          <div>3. Press gently but firmly (like touching a phone screen)</div>
-          <div>4. Stay perfectly still for 15 seconds</div>
-          <div>5. Watch the Red value - it should be 80-150 and change slightly</div>
+          <div>1. <strong>Turn on iPhone flashlight first</strong></div>
+          <div>2. Click "Detect Heart Rate"</div>
+          <div>3. <strong>Cover BOTH camera and flashlight with fingertip</strong></div>
+          <div>4. Press gently (like touching screen) - you should see red glow</div>
+          <div>5. Stay perfectly still for 20 seconds</div>
+          <div>6. Algorithm will find your heartbeat peaks automatically</div>
         </div>
       </div>
     </div>
