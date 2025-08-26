@@ -8,6 +8,7 @@ import SimulationControls from './components/SimulationControls'
 import RespiratoryRateSimulator from './components/RespiratoryRateSimulator'
 import AutoDemoControls from './components/AutoDemoControls'
 import ReportButton from './components/ReportButton'
+import ErrorBoundary from './components/ErrorBoundary'
 import { useVitalsData } from './hooks/useVitalsData'
 
 function App() {
@@ -35,62 +36,64 @@ function App() {
         )}
         
         {currentView === 'dashboard' && (
-          <div className="space-y-8">
-            {/* Header */}
-            <div className="text-center space-y-4">
-              <h1 className="text-4xl font-bold neon-text">
-                PulseAI Dashboard
-              </h1>
-              <p className="text-dark-300 text-lg max-w-2xl mx-auto">
-                Real-time health monitoring with AI-powered insights
-              </p>
-            </div>
-            
-            {/* Dashboard Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Vitals Cards */}
-              <div className="lg:col-span-2 space-y-8">
-                <VitalsDashboard vitalsData={vitalsData} isLoading={isLoading} />
+          <ErrorBoundary>
+            <div className="space-y-8">
+              {/* Header */}
+              <div className="text-center space-y-4">
+                <h1 className="text-4xl font-bold neon-text">
+                  PulseAI Dashboard
+                </h1>
+                <p className="text-dark-300 text-lg max-w-2xl mx-auto">
+                  Real-time health monitoring with AI-powered insights
+                </p>
+              </div>
+              
+              {/* Dashboard Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Vitals Cards */}
+                <div className="lg:col-span-2 space-y-8">
+                  <VitalsDashboard vitalsData={vitalsData} isLoading={isLoading} />
 
-                {/* Single Heart Rate Component (with Simulation option) */}
-                <WorkingHeartRate onHeartRateDetected={handleHeartRateDetected} />
+                  {/* Single Heart Rate Component (with Simulation option) */}
+                  <WorkingHeartRate onHeartRateDetected={handleHeartRateDetected} />
 
-                {/* Scenario Controls */}
-                <SimulationControls
-                  onAnxiety={(sec) => triggerScenario('anxiety', sec)}
-                  onLowSpO2={(sec) => triggerScenario('low_spo2', sec)}
-                  onReset={() => resetScenario()}
-                />
+                  {/* Scenario Controls */}
+                  <SimulationControls
+                    onAnxiety={(sec) => triggerScenario('anxiety', sec)}
+                    onLowSpO2={(sec) => triggerScenario('low_spo2', sec)}
+                    onReset={() => resetScenario()}
+                  />
 
-                {/* Auto Demo */}
-                <AutoDemoControls
-                  onTrigger={(scenario, sec) => triggerScenario(scenario, sec)}
-                  onReset={() => resetScenario()}
-                />
+                  {/* Auto Demo */}
+                  <AutoDemoControls
+                    onTrigger={(scenario, sec) => triggerScenario(scenario, sec)}
+                    onReset={() => resetScenario()}
+                  />
 
-                {/* Report Export */}
-                <div>
-                  <ReportButton vitals={vitalsData} scenarioRef={currentScenario} riskLevel={riskLevel} />
+                  {/* Report Export */}
+                  <div>
+                    <ReportButton vitals={vitalsData} scenarioRef={currentScenario} riskLevel={riskLevel} />
+                  </div>
+                </div>
+
+                {/* Chart + Breathing */}
+                <div className="lg:col-span-1 space-y-8">
+                  <VitalsChart vitalsData={vitalsData} />
+                  <RespiratoryRateSimulator />
                 </div>
               </div>
-
-              {/* Chart + Breathing */}
-              <div className="lg:col-span-1 space-y-8">
-                <VitalsChart vitalsData={vitalsData} />
-                <RespiratoryRateSimulator />
+              
+              {/* Navigation */}
+              <div className="flex justify-center mt-12">
+                <button
+                  onClick={() => setCurrentView('landing')}
+                  className="glass-card px-6 py-3 rounded-lg hover-glow transition-all duration-300 text-primary-400 hover:text-primary-300"
+                >
+                  ← Back to Home
+                </button>
               </div>
             </div>
-            
-            {/* Navigation */}
-            <div className="flex justify-center mt-12">
-              <button
-                onClick={() => setCurrentView('landing')}
-                className="glass-card px-6 py-3 rounded-lg hover-glow transition-all duration-300 text-primary-400 hover:text-primary-300"
-              >
-                ← Back to Home
-              </button>
-            </div>
-          </div>
+          </ErrorBoundary>
         )}
       </div>
     </div>
