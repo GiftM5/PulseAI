@@ -154,3 +154,39 @@ class CameraHeartRateReading(BaseModel):
     signal_quality: Optional[str] = None
     device: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.now)
+
+# AI Clinic models
+class TriageInput(BaseModel):
+    name: Optional[str] = None
+    age: Optional[int] = None
+    language: Optional[str] = Field(default="en")
+    cough_days: Optional[int] = Field(default=0, ge=0, le=60)
+    fever: Optional[bool] = Field(default=False)
+    night_sweats: Optional[bool] = Field(default=False)
+    weight_loss: Optional[bool] = Field(default=False)
+    breathlessness: Optional[bool] = Field(default=False)
+    chest_pain: Optional[bool] = Field(default=False)
+    other: Optional[str] = None
+
+class TriageResult(BaseModel):
+    risk_level: RiskLevel
+    score: int = 0
+    summary: str
+    recommendations: List[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+class AppointmentRequest(BaseModel):
+    name: str
+    phone: Optional[str] = None
+    id_number: Optional[str] = None
+    preferred_time: Optional[str] = None
+    reason: Optional[str] = None
+
+class Appointment(BaseModel):
+    id: str
+    name: str
+    phone: Optional[str] = None
+    preferred_time: Optional[str] = None
+    reason: Optional[str] = None
+    status: Literal["booked", "pending", "cancelled"] = "booked"
+    created_at: datetime = Field(default_factory=datetime.now)
