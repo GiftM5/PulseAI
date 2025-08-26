@@ -4,12 +4,14 @@ import VitalsDashboard from './components/VitalsDashboard'
 import VitalsChart from './components/VitalsChart'
 import RiskAlert from './components/RiskAlert'
 import WorkingHeartRate from './components/WorkingHeartRate'
+import SimulationControls from './components/SimulationControls'
+import RespiratoryRateSimulator from './components/RespiratoryRateSimulator'
 import { useVitalsData } from './hooks/useVitalsData'
 
 function App() {
   const [currentView, setCurrentView] = useState('landing')
   const [realHeartRate, setRealHeartRate] = useState(null)
-  const { vitalsData, riskLevel, isLoading, updateVitalsFromCamera } = useVitalsData()
+  const { vitalsData, riskLevel, isLoading, updateVitalsFromCamera, triggerScenario, resetScenario } = useVitalsData()
 
   const handleHeartRateDetected = (heartRate) => {
     setRealHeartRate(heartRate)
@@ -50,11 +52,19 @@ function App() {
 
                 {/* Single Heart Rate Component (with Simulation option) */}
                 <WorkingHeartRate onHeartRateDetected={handleHeartRateDetected} />
+
+                {/* Scenario Controls */}
+                <SimulationControls
+                  onAnxiety={(sec) => triggerScenario('anxiety', sec)}
+                  onLowSpO2={(sec) => triggerScenario('low_spo2', sec)}
+                  onReset={() => resetScenario()}
+                />
               </div>
 
-              {/* Chart */}
-              <div className="lg:col-span-1">
+              {/* Chart + Breathing */}
+              <div className="lg:col-span-1 space-y-8">
                 <VitalsChart vitalsData={vitalsData} />
+                <RespiratoryRateSimulator />
               </div>
             </div>
             
