@@ -11,6 +11,10 @@ export const useVitalsData = () => {
 	const scenarioTimeoutRef = useRef(null)
 	const currentScenarioRef = useRef('none')
 
+	// Centralized API base URL
+	const API_BASE = (import.meta?.env?.VITE_API_URL) 
+		|| (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:8000` : 'http://127.0.0.1:8000')
+
 	// Simulate realistic vital signs data when API is not available
 	const generateMockData = () => {
 		const now = Date.now()
@@ -116,7 +120,7 @@ export const useVitalsData = () => {
 			setError(null)
 			
 			// Try to fetch from FastAPI backend
-			const response = await fetch('http://192.168.0.174:8000/api/vitals', {
+			const response = await fetch(`${API_BASE}/api/vitals`, {
 				method: 'GET',
 				headers: {
 					'Content-Type': 'application/json',
@@ -220,7 +224,7 @@ export const useVitalsData = () => {
 	// Helper to POST camera BPM to backend (best-effort)
 	const postCameraBpm = async (bpm) => {
 		try {
-			await fetch('http://192.168.0.174:8000/api/camera/hr', {
+			await fetch(`${API_BASE}/api/camera/hr`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
