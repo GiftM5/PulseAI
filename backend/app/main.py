@@ -5,11 +5,13 @@ from typing import Optional, List
 import asyncio
 from datetime import datetime, timedelta
 import logging
+import uuid
 
 from .models import (
     VitalSigns, VitalsResponse, HealthRiskAssessment, 
     HistoricalData, UserProfile, MonitoringSession,
-    AlertConfiguration, RiskLevel, CameraHeartRateInput, CameraHeartRateReading
+    AlertConfiguration, RiskLevel, CameraHeartRateInput, CameraHeartRateReading,
+    TriageInput, TriageResult, AppointmentRequest, Appointment
 )
 from .vitals_simulator import VitalsSimulator
 from .risk_assessment import AIRiskAssessment
@@ -33,8 +35,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://192.168.0.174:3000",  # Your local network IP
-        "*"  # Allow all origins for mobile testing
+        "http://192.168.0.174:3000",
+        "*"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -47,18 +49,19 @@ risk_assessor: Optional[AIRiskAssessment] = None
 current_session: Optional[MonitoringSession] = None
 user_profile: Optional[UserProfile] = None
 
-# In-memory storage for last camera heart rate
+# In-memory storage
 last_camera_hr: Optional[CameraHeartRateReading] = None
+appointments: List[Appointment] = []
+
+# Dependencies
 
 def get_vitals_simulator() -> VitalsSimulator:
-    """Dependency to get or create vitals simulator"""
     global vitals_simulator
     if vitals_simulator is None:
         vitals_simulator = VitalsSimulator(user_profile)
     return vitals_simulator
 
 def get_risk_assessor() -> AIRiskAssessment:
-    """Dependency to get or create risk assessor"""
     global risk_assessor
     if risk_assessor is None:
         risk_assessor = AIRiskAssessment(user_profile)
@@ -66,7 +69,6 @@ def get_risk_assessor() -> AIRiskAssessment:
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize the application on startup"""
     logger.info("PulseAI Backend API starting up...")
     global vitals_simulator, risk_assessor
     vitals_simulator = VitalsSimulator()
@@ -75,7 +77,6 @@ async def startup_event():
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
     return {
         "message": "PulseAI Backend API",
         "version": "1.0.0",
@@ -88,13 +89,14 @@ async def root():
             "profile": "/api/profile",
             "session": "/api/session",
             "camera_hr_post": "/api/camera/hr",
-            "camera_hr_get": "/api/camera/hr/latest"
+            "camera_hr_get": "/api/camera/hr/latest",
+            "triage": "/api/clinic/triage",
+            "appointments": "/api/clinic/appointments"
         }
     }
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
@@ -110,15 +112,9 @@ async def get_current_vitals(
     simulator: VitalsSimulator = Depends(get_vitals_simulator),
     assessor: AIRiskAssessment = Depends(get_risk_assessor)
 ):
-    """Get current vital signs with AI risk assessment"""
     try:
-        # Generate current vitals
         vitals = simulator.generate_current_vitals()
-        
-        # Perform risk assessment
         risk_assessment = assessor.assess_risk(vitals)
-        
-        # Convert to response format
         response = VitalsResponse(
             heart_rate=vitals.heart_rate,
             spo2=vitals.spo2,
@@ -129,11 +125,8 @@ async def get_current_vitals(
             hrv_trend=vitals.hrv_trend,
             riskAssessment=risk_assessment
         )
-        
         logger.info(f"Generated vitals: HR={vitals.heart_rate}, SpO2={vitals.spo2}, HRV={vitals.hrv}, Risk={risk_assessment.risk_level}")
-        
         return response
-        
     except Exception as e:
         logger.error(f"Error generating vitals: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating vitals: {str(e)}")
@@ -297,10 +290,9 @@ async def get_session_status():
         "uptime_minutes": (datetime.now() - current_session.start_time).total_seconds() / 60
     }
 
-# Camera heart rate ingestion and retrieval
+# Camera HR ingestion
 @app.post("/api/camera/hr", response_model=CameraHeartRateReading)
 async def post_camera_heart_rate(reading: CameraHeartRateInput):
-    """Ingest a heart rate reading measured via camera from the client."""
     try:
         global last_camera_hr
         last_camera_hr = CameraHeartRateReading(
@@ -318,8 +310,64 @@ async def post_camera_heart_rate(reading: CameraHeartRateInput):
 
 @app.get("/api/camera/hr/latest", response_model=Optional[CameraHeartRateReading])
 async def get_latest_camera_heart_rate():
-    """Return the most recently ingested camera heart rate reading, if any."""
     return last_camera_hr
+
+# AI Clinic: Triage
+@app.post("/api/clinic/triage", response_model=TriageResult)
+async def triage(input: TriageInput):
+    try:
+        score = 0
+        if (input.cough_days or 0) >= 14: score += 3
+        if input.fever: score += 1
+        if input.night_sweats: score += 2
+        if input.weight_loss: score += 2
+        if input.breathlessness: score += 1
+        if input.chest_pain: score += 1
+        if (input.other or '').lower().find('blood') >= 0: score += 2
+        if (input.other or '').lower().find('hiv') >= 0: score += 1
+
+        risk_level = RiskLevel.LOW
+        if score >= 6: risk_level = RiskLevel.HIGH
+        elif score >= 3: risk_level = RiskLevel.MEDIUM
+
+        recommendations = []
+        if risk_level == RiskLevel.HIGH:
+            recommendations.append("Please visit a clinic for TB screening within 24–48 hours.")
+        elif risk_level == RiskLevel.MEDIUM:
+            recommendations.append("Monitor symptoms and visit a clinic this week if cough persists.")
+        else:
+            recommendations.append("Self-care: rest, hydration, and monitor symptoms. Seek care if worsening.")
+
+        summary = (
+            f"Triage for {input.name or 'patient'}: score {score}, risk {risk_level}. "
+            "Screened for cough, fever, night sweats, weight loss, breathlessness, chest pain."
+        )
+        return TriageResult(risk_level=risk_level, score=score, summary=summary, recommendations=recommendations)
+    except Exception as e:
+        logger.error(f"Error triaging: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error triaging: {str(e)}")
+
+# AI Clinic: Appointments
+@app.post("/api/clinic/appointments", response_model=Appointment)
+async def create_appointment(req: AppointmentRequest):
+    try:
+        appt = Appointment(
+            id=str(uuid.uuid4())[:8],
+            name=req.name,
+            phone=req.phone,
+            preferred_time=req.preferred_time,
+            reason=req.reason,
+            status="booked"
+        )
+        appointments.append(appt)
+        return appt
+    except Exception as e:
+        logger.error(f"Error creating appointment: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating appointment: {str(e)}")
+
+@app.get("/api/clinic/appointments", response_model=List[Appointment])
+async def list_appointments():
+    return appointments
 
 if __name__ == "__main__":
     import uvicorn
