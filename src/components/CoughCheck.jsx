@@ -9,8 +9,10 @@ const CoughCheck = ({ onResult }) => {
 	const audioCtxRef = useRef(null)
 	const sourceRef = useRef(null)
 	const analyserRef = useRef(null)
+	const fftAnalyserRef = useRef(null)
 	const rafRef = useRef(null)
 	const refractoryUntilRef = useRef(0)
+	const fluVotesRef = useRef(0)
 
 	useEffect(() => {
 		return () => stop()
@@ -19,6 +21,7 @@ const CoughCheck = ({ onResult }) => {
 	const start = async () => {
 		setPermissionError('')
 		setCoughEvents(0)
+		fluVotesRef.current = 0
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 			streamRef.current = stream
@@ -26,7 +29,10 @@ const CoughCheck = ({ onResult }) => {
 			sourceRef.current = audioCtxRef.current.createMediaStreamSource(stream)
 			analyserRef.current = audioCtxRef.current.createAnalyser()
 			analyserRef.current.fftSize = 1024
+			fftAnalyserRef.current = audioCtxRef.current.createAnalyser()
+			fftAnalyserRef.current.fftSize = 2048
 			sourceRef.current.connect(analyserRef.current)
+			sourceRef.current.connect(fftAnalyserRef.current)
 			setRecording(true)
 			setStatus('Recording cough (10s)...')
 			refractoryUntilRef.current = 0
@@ -52,6 +58,7 @@ const CoughCheck = ({ onResult }) => {
 		audioCtxRef.current = null
 		sourceRef.current = null
 		analyserRef.current = null
+		fftAnalyserRef.current = null
 		streamRef.current = null
 		setRecording(false)
 	}
@@ -59,17 +66,18 @@ const CoughCheck = ({ onResult }) => {
 	const finish = () => {
 		stop()
 		const detected = coughEvents >= 2
+		const fluLike = fluVotesRef.current >= 2 // crude majority over events
 		setStatus(detected ? `Cough detected (${coughEvents} events)` : 'No cough detected')
-		if (onResult) onResult({ coughDetected: detected, coughEvents })
+		if (onResult) onResult({ coughDetected: detected, coughEvents, fluLike })
 	}
 
 	const loop = () => {
 		const analyser = analyserRef.current
-		if (!analyser) return
+		const fftAnalyser = fftAnalyserRef.current
+		if (!analyser || !fftAnalyser) return
 		const bufferLen = analyser.fftSize
 		const data = new Uint8Array(bufferLen)
 		analyser.getByteTimeDomainData(data)
-		// Compute RMS energy (0..1)
 		let sum = 0
 		for (let i = 0; i < bufferLen; i++) {
 			const centered = (data[i] - 128) / 128
@@ -77,11 +85,23 @@ const CoughCheck = ({ onResult }) => {
 		}
 		const rms = Math.sqrt(sum / bufferLen)
 		const now = performance.now()
-		// Threshold & refractory (~500ms)
-		const threshold = 0.085 // tweakable sensitivity
+		const threshold = 0.085
 		if (rms > threshold && now > refractoryUntilRef.current) {
 			setCoughEvents(prev => prev + 1)
 			refractoryUntilRef.current = now + 500
+			// Spectral centroid as crude flu-like heuristic (lower centroid ~wet cough)
+			const spec = new Uint8Array(fftAnalyser.frequencyBinCount)
+			fftAnalyser.getByteFrequencyData(spec)
+			let num = 0, den = 0
+			for (let i = 0; i < spec.length; i++) {
+				num += i * spec[i]
+				den += spec[i]
+			}
+			const centroidBin = den > 0 ? num / den : 0
+			const centroidHz = centroidBin * (audioCtxRef.current.sampleRate / 2) / spec.length
+			if (centroidHz < 900) { // heuristically: <900Hz leans flu-like/wet
+				fluVotesRef.current += 1
+			}
 		}
 		rafRef.current = requestAnimationFrame(loop)
 	}
