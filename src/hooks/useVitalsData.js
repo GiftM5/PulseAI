@@ -190,6 +190,24 @@ export const useVitalsData = () => {
     }
   }
 
+  // Helper to POST camera BPM to backend (best-effort)
+  const postCameraBpm = async (bpm) => {
+    try {
+      await fetch('http://192.168.0.174:8000/api/camera/hr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          heart_rate: bpm,
+          method: 'ppg-webcam',
+          signal_quality: 'unknown',
+          device: navigator.userAgent
+        })
+      })
+    } catch (e) {
+      // Silent fail; backend might not be running
+    }
+  }
+
   // Update vitals with real camera data
   const updateVitalsFromCamera = (heartRate) => {
     const newData = {
@@ -205,6 +223,8 @@ export const useVitalsData = () => {
     setPreviousData(vitalsData)
     setVitalsData(newData)
     setRiskLevel(calculateRiskLevel(newData))
+    // Fire-and-forget POST to backend
+    postCameraBpm(heartRate)
   }
 
   return {

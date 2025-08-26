@@ -9,7 +9,7 @@ import logging
 from .models import (
     VitalSigns, VitalsResponse, HealthRiskAssessment, 
     HistoricalData, UserProfile, MonitoringSession,
-    AlertConfiguration, RiskLevel
+    AlertConfiguration, RiskLevel, CameraHeartRateInput, CameraHeartRateReading
 )
 from .vitals_simulator import VitalsSimulator
 from .risk_assessment import AIRiskAssessment
@@ -47,6 +47,9 @@ risk_assessor: Optional[AIRiskAssessment] = None
 current_session: Optional[MonitoringSession] = None
 user_profile: Optional[UserProfile] = None
 
+# In-memory storage for last camera heart rate
+last_camera_hr: Optional[CameraHeartRateReading] = None
+
 def get_vitals_simulator() -> VitalsSimulator:
     """Dependency to get or create vitals simulator"""
     global vitals_simulator
@@ -83,7 +86,9 @@ async def root():
             "historical": "/api/vitals/historical",
             "risk": "/api/risk",
             "profile": "/api/profile",
-            "session": "/api/session"
+            "session": "/api/session",
+            "camera_hr_post": "/api/camera/hr",
+            "camera_hr_get": "/api/camera/hr/latest"
         }
     }
 
@@ -95,7 +100,8 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "services": {
             "vitals_simulator": vitals_simulator is not None,
-            "risk_assessor": risk_assessor is not None
+            "risk_assessor": risk_assessor is not None,
+            "camera_hr_available": last_camera_hr is not None
         }
     }
 
@@ -290,6 +296,30 @@ async def get_session_status():
         "session": current_session,
         "uptime_minutes": (datetime.now() - current_session.start_time).total_seconds() / 60
     }
+
+# Camera heart rate ingestion and retrieval
+@app.post("/api/camera/hr", response_model=CameraHeartRateReading)
+async def post_camera_heart_rate(reading: CameraHeartRateInput):
+    """Ingest a heart rate reading measured via camera from the client."""
+    try:
+        global last_camera_hr
+        last_camera_hr = CameraHeartRateReading(
+            heart_rate=reading.heart_rate,
+            method=reading.method,
+            signal_quality=reading.signal_quality,
+            device=reading.device,
+            timestamp=reading.timestamp or datetime.now()
+        )
+        logger.info(f"Camera HR updated: {last_camera_hr.heart_rate} BPM (method={last_camera_hr.method})")
+        return last_camera_hr
+    except Exception as e:
+        logger.error(f"Error ingesting camera heart rate: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error ingesting camera heart rate: {str(e)}")
+
+@app.get("/api/camera/hr/latest", response_model=Optional[CameraHeartRateReading])
+async def get_latest_camera_heart_rate():
+    """Return the most recently ingested camera heart rate reading, if any."""
+    return last_camera_hr
 
 if __name__ == "__main__":
     import uvicorn

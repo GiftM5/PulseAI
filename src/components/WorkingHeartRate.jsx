@@ -39,19 +39,38 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 
   const startCamera = async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment', // Back camera
-          width: { ideal: 640 },
-          height: { ideal: 480 }
-        }
-      })
-      
+      let mediaStream
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: 'environment' },
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        })
+      } catch (backErr) {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        })
+      }
+
       setStream(mediaStream)
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream
         await videoRef.current.play()
+      }
+
+      // Try to enable torch if supported
+      const track = mediaStream.getVideoTracks()[0]
+      if (track && track.getCapabilities && track.getCapabilities().torch) {
+        try {
+          await track.applyConstraints({ advanced: [{ torch: true }] })
+        } catch {}
       }
 
       return true
