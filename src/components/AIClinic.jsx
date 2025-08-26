@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import ReportButton from './ReportButton'
+import CoughCheck from './CoughCheck'
 
 const apiBase = (import.meta?.env?.VITE_API_URL)
 	|| (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:8000` : 'http://127.0.0.1:8000')
@@ -17,10 +18,10 @@ const AIClinic = () => {
 	const [lastAppointment, setLastAppointment] = useState(null)
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState('')
+	const [coughDetected, setCoughDetected] = useState(false)
 
 	const rankedClinics = useMemo(() => {
-		// Simple ranking: prefer TB if cough >= 14 days or night sweats/weight loss
-		const tbConcern = (triage.cough_days || 0) >= 14 || triage.night_sweats || triage.weight_loss
+		const tbConcern = ((triage.cough_days || 0) >= 14) || triage.night_sweats || triage.weight_loss || coughDetected
 		return [...mockClinics]
 			.sort((a, b) => {
 				let sa = 0, sb = 0
@@ -34,7 +35,7 @@ const AIClinic = () => {
 				sb += b.distanceKm
 				return sa - sb
 			})
-	}, [triage])
+	}, [triage, coughDetected])
 
 	const submitTriage = async (e) => {
 		e.preventDefault()
@@ -46,7 +47,7 @@ const AIClinic = () => {
 				body: JSON.stringify({
 					...triage,
 					age: triage.age ? Number(triage.age) : undefined,
-					cough_days: triage.cough_days ? Number(triage.cough_days) : 0
+					cough_days: triage.cough_days ? Number(triage.cough_days) : (coughDetected ? 3 : 0) // small boost if cough detected
 				})
 			})
 			if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -82,7 +83,7 @@ const AIClinic = () => {
 		<div className="space-y-6">
 			<div className="glass-card p-6 rounded-xl">
 				<h2 className="text-2xl font-semibold text-white">🏥 AI Clinic</h2>
-				<p className="text-dark-300 text-sm mt-1">Reception, AI triage, and clinic navigation. Create a ticket and take a PDF to the facility.</p>
+				<p className="text-dark-300 text-sm mt-1">Reception, AI triage, clinic navigation — now with Cough Check.</p>
 			</div>
 
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -102,42 +103,51 @@ const AIClinic = () => {
 					)}
 				</div>
 
-				{/* Triage */}
-				<div className="glass-card p-6 rounded-xl space-y-4">
-					<h3 className="text-xl font-semibold text-white">🤖 AI Triage</h3>
-					<form onSubmit={submitTriage} className="space-y-3">
-						<div className="grid grid-cols-2 gap-3">
-							<input className="bg-dark-800 text-white px-3 py-2 rounded" placeholder="Name" value={triage.name} onChange={e => setTriage({ ...triage, name: e.target.value })} />
-							<input className="bg-dark-800 text-white px-3 py-2 rounded" placeholder="Age" value={triage.age} onChange={e => setTriage({ ...triage, age: e.target.value })} />
-						</div>
-						<div className="grid grid-cols-2 gap-3">
-							<input className="bg-dark-800 text-white px-3 py-2 rounded" placeholder="Cough days" value={triage.cough_days} onChange={e => setTriage({ ...triage, cough_days: e.target.value })} />
-							<select className="bg-dark-800 text-white px-3 py-2 rounded" value={triage.language} onChange={e => setTriage({ ...triage, language: e.target.value })}>
-								<option value="en">English</option>
-								<option value="zu">Zulu</option>
-								<option value="xh">Xhosa</option>
-								<option value="st">Sotho</option>
-							</select>
-						</div>
-						<div className="grid grid-cols-2 gap-3 text-sm text-dark-300">
-							<label className="flex items-center gap-2"><input type="checkbox" checked={triage.fever} onChange={e => setTriage({ ...triage, fever: e.target.checked })} /> Fever</label>
-							<label className="flex items-center gap-2"><input type="checkbox" checked={triage.night_sweats} onChange={e => setTriage({ ...triage, night_sweats: e.target.checked })} /> Night sweats</label>
-							<label className="flex items-center gap-2"><input type="checkbox" checked={triage.weight_loss} onChange={e => setTriage({ ...triage, weight_loss: e.target.checked })} /> Weight loss</label>
-							<label className="flex items-center gap-2"><input type="checkbox" checked={triage.breathlessness} onChange={e => setTriage({ ...triage, breathlessness: e.target.checked })} /> Breathlessness</label>
-							<label className="flex items-center gap-2"><input type="checkbox" checked={triage.chest_pain} onChange={e => setTriage({ ...triage, chest_pain: e.target.checked })} /> Chest pain</label>
-						</div>
-						<textarea className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="Other symptoms (optional)" rows={2} value={triage.other} onChange={e => setTriage({ ...triage, other: e.target.value })} />
-						<button disabled={busy} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Run Triage</button>
-					</form>
-					{triageResult && (
-						<div className="bg-dark-800/50 rounded p-3 text-sm">
-							<div className="text-white font-medium">Risk: {triageResult.risk_level} (score {triageResult.score})</div>
-							<div className="text-dark-300 mt-1">{triageResult.summary}</div>
-							<ul className="mt-2 list-disc list-inside text-dark-300">
-								{triageResult.recommendations.map((r, i) => <li key={i}>{r}</li>)}
-							</ul>
-						</div>
-					)}
+				{/* Triage + Cough */}
+				<div className="space-y-6">
+					<div className="glass-card p-6 rounded-xl space-y-4">
+						<h3 className="text-xl font-semibold text-white">🤖 AI Triage</h3>
+						<form onSubmit={submitTriage} className="space-y-3">
+							<div className="grid grid-cols-2 gap-3">
+								<input className="bg-dark-800 text-white px-3 py-2 rounded" placeholder="Name" value={triage.name} onChange={e => setTriage({ ...triage, name: e.target.value })} />
+								<input className="bg-dark-800 text-white px-3 py-2 rounded" placeholder="Age" value={triage.age} onChange={e => setTriage({ ...triage, age: e.target.value })} />
+							</div>
+							<div className="grid grid-cols-2 gap-3">
+								<input className="bg-dark-800 text-white px-3 py-2 rounded" placeholder="Cough days" value={triage.cough_days} onChange={e => setTriage({ ...triage, cough_days: e.target.value })} />
+								<select className="bg-dark-800 text-white px-3 py-2 rounded" value={triage.language} onChange={e => setTriage({ ...triage, language: e.target.value })}>
+									<option value="en">English</option>
+									<option value="zu">Zulu</option>
+									<option value="xh">Xhosa</option>
+									<option value="st">Sotho</option>
+								</select>
+							</div>
+							<div className="grid grid-cols-2 gap-3 text-sm text-dark-300">
+								<label className="flex items-center gap-2"><input type="checkbox" checked={triage.fever} onChange={e => setTriage({ ...triage, fever: e.target.checked })} /> Fever</label>
+								<label className="flex items-center gap-2"><input type="checkbox" checked={triage.night_sweats} onChange={e => setTriage({ ...triage, night_sweats: e.target.checked })} /> Night sweats</label>
+								<label className="flex items-center gap-2"><input type="checkbox" checked={triage.weight_loss} onChange={e => setTriage({ ...triage, weight_loss: e.target.checked })} /> Weight loss</label>
+								<label className="flex items-center gap-2"><input type="checkbox" checked={triage.breathlessness} onChange={e => setTriage({ ...triage, breathlessness: e.target.checked })} /> Breathlessness</label>
+								<label className="flex items-center gap-2"><input type="checkbox" checked={triage.chest_pain} onChange={e => setTriage({ ...triage, chest_pain: e.target.checked })} /> Chest pain</label>
+							</div>
+							<textarea className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="Other symptoms (optional)" rows={2} value={triage.other} onChange={e => setTriage({ ...triage, other: e.target.value })} />
+							<button disabled={busy} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Run Triage</button>
+						</form>
+						{triageResult && (
+							<div className="bg-dark-800/50 rounded p-3 text-sm">
+								<div className="text-white font-medium">Risk: {triageResult.risk_level} (score {triageResult.score})</div>
+								<div className="text-dark-300 mt-1">{triageResult.summary}</div>
+								<ul className="mt-2 list-disc list-inside text-dark-300">
+									{triageResult.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+								</ul>
+							</div>
+						)}
+					</div>
+
+					<CoughCheck onResult={(r) => {
+						setCoughDetected(!!r.coughDetected)
+						if (r.coughDetected && (!triage.cough_days || Number(triage.cough_days) < 1)) {
+							setTriage(prev => ({ ...prev, cough_days: 3 }))
+						}
+					}} />
 				</div>
 			</div>
 
