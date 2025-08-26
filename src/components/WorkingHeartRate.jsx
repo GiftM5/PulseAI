@@ -10,6 +10,8 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 	const [progress, setProgress] = useState(0)
 	const [status, setStatus] = useState('Ready')
 	const [simulate, setSimulate] = useState(false)
+	const [fingerPresent, setFingerPresent] = useState(false)
+	const [signalQuality, setSignalQuality] = useState('unknown')
 	
 	const dataRef = useRef([])
 	const intervalRef = useRef(null)
@@ -24,10 +26,13 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 
 	const postBpm = async (bpm, method) => {
 		try {
-			await fetch('http://192.168.0.174:8000/api/camera/hr', {
+			// Defer to hook centralized API if available via global env
+			const base = (import.meta?.env?.VITE_API_URL) 
+				|| (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:8000` : 'http://127.0.0.1:8000')
+			await fetch(`${base}/api/camera/hr`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ heart_rate: bpm, method, device: navigator.userAgent })
+				body: JSON.stringify({ heart_rate: bpm, method, device: navigator.userAgent, signal_quality: signalQuality })
 			})
 		} catch {}
 	}
@@ -51,6 +56,8 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 		setIsRecording(false)
 		setProgress(0)
 		dataRef.current = []
+		setFingerPresent(false)
+		setSignalQuality('unknown')
 	}
 
 	const startCamera = async () => {
@@ -95,6 +102,26 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 		}
 	}
 
+	// Assess finger presence and signal quality from RGB
+	const evaluateFingerPresence = (r, g, b) => {
+		const brightness = (r + g + b) / 3
+		const redDominance = r - (g + b) / 2
+		// Heuristics: finger over torch yields high red dominance and mid-high brightness
+		const finger = redDominance > 20 && brightness > 40 && brightness < 240
+		return { finger, brightness, redDominance }
+	}
+
+	const evaluateSignalQuality = () => {
+		if (dataRef.current.length < 30) return 'unknown'
+		const greens = dataRef.current.slice(-30).map(d => d.green)
+		const min = Math.min(...greens)
+		const max = Math.max(...greens)
+		const variation = max - min
+		if (variation > 8) return 'good'
+		if (variation > 4) return 'fair'
+		return 'poor'
+	}
+
 	// This is the PROVEN algorithm used by working heart rate apps
 	const processFrame = () => {
 		if (!videoRef.current || !canvasRef.current || !isRecording) return
@@ -112,69 +139,55 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 		const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
 		const data = imageData.data
 
-		// Calculate average RGB values (this is key!)
+		// Calculate average RGB values
 		let r = 0, g = 0, b = 0, pixels = 0
-
-		// Sample every 4th pixel for performance
 		for (let i = 0; i < data.length; i += 16) {
 			r += data[i]
 			g += data[i + 1]
 			b += data[i + 2]
 			pixels++
 		}
-
 		r /= pixels
 		g /= pixels
 		b /= pixels
 
-		// Store the GREEN channel (most sensitive to blood volume changes)
-		const timestamp = performance.now()
-		dataRef.current.push({
-			time: timestamp,
-			green: g,
-			red: r,
-			blue: b
-		})
-
-		// Update progress
-		const elapsed = (timestamp - startTimeRef.current) / 1000
-		setProgress(Math.min(elapsed / 30, 1))
+		// Finger presence
+		const { finger } = evaluateFingerPresence(r, g, b)
+		setFingerPresent(finger)
+		
+		// Only collect signal if finger appears present
+		if (finger) {
+			const timestamp = performance.now()
+			dataRef.current.push({ time: timestamp, green: g, red: r, blue: b })
+			const elapsed = (timestamp - startTimeRef.current) / 1000
+			setProgress(Math.min(elapsed / 30, 1))
+			setSignalQuality(evaluateSignalQuality())
+		} else {
+			// If no finger, slowly decay progress and keep status informative
+			setProgress(p => Math.max(0, p - 0.01))
+			setSignalQuality('unknown')
+		}
 	}
 
 	const calculateHeartRate = () => {
 		const data = dataRef.current
 		if (data.length < 100) return null
-
-		// Use GREEN channel (standard for PPG)
 		const signal = data.map(d => d.green)
 		const times = data.map(d => d.time)
-
-		// Remove DC component (detrend)
 		const mean = signal.reduce((a, b) => a + b) / signal.length
 		const detrended = signal.map(s => s - mean)
-
-		// Apply simple bandpass filter (0.5-4 Hz = 30-240 BPM)
 		const filtered = bandpassFilter(detrended, 30)
-
-		// Find peaks
 		const peaks = findPeaks(filtered)
 		if (peaks.length < 3) return null
-
-		// Calculate intervals between peaks
 		const intervals = []
 		for (let i = 1; i < peaks.length; i++) {
 			const timeDiff = (times[peaks[i]] - times[peaks[i-1]]) / 1000
-			if (timeDiff > 0.25 && timeDiff < 2.0) {
-				intervals.push(60 / timeDiff)
-			}
+			if (timeDiff > 0.25 && timeDiff < 2.0) intervals.push(60 / timeDiff)
 		}
-
 		if (intervals.length < 2) return null
 		intervals.sort((a, b) => a - b)
 		const median = intervals[Math.floor(intervals.length / 2)]
-		if (median >= 40 && median <= 200) {
-			return Math.round(median)
-		}
+		if (median >= 40 && median <= 200) return Math.round(median)
 		return null
 	}
 
@@ -182,12 +195,10 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 	const bandpassFilter = (signal, sampleRate) => {
 		const filtered = []
 		const alpha = 0.95
-		
 		filtered[0] = signal[0]
 		for (let i = 1; i < signal.length; i++) {
 			filtered[i] = alpha * (filtered[i-1] + signal[i] - signal[i-1])
 		}
-		
 		return filtered
 	}
 
@@ -195,19 +206,11 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 	const findPeaks = (signal) => {
 		const peaks = []
 		const threshold = Math.max(...signal) * 0.6
-		
 		for (let i = 2; i < signal.length - 2; i++) {
-			if (signal[i] > signal[i-1] && 
-				signal[i] > signal[i+1] && 
-				signal[i] > signal[i-2] && 
-				signal[i] > signal[i+2] && 
-				signal[i] > threshold) {
-				if (peaks.length === 0 || i - peaks[peaks.length - 1] > 9) {
-					peaks.push(i)
-				}
+			if (signal[i] > signal[i-1] && signal[i] > signal[i+1] && signal[i] > signal[i-2] && signal[i] > signal[i+2] && signal[i] > threshold) {
+				if (peaks.length === 0 || i - peaks[peaks.length - 1] > 9) peaks.push(i)
 			}
 		}
-		
 		return peaks
 	}
 
@@ -220,7 +223,6 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 			let currentBpm = 72 + Math.round((Math.random() - 0.5) * 10)
 			simulateRef.current = setInterval(() => {
 				seconds += 1
-				// Slowly vary BPM
 				currentBpm += Math.round((Math.random() - 0.5) * 3)
 				currentBpm = Math.max(55, Math.min(110, currentBpm))
 				setProgress(Math.min(seconds / 20, 1))
@@ -253,14 +255,14 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 	}
 
 	const beginRecording = () => {
-		setStatus('Measuring heart rate...')
+		setStatus('Place finger on camera + torch')
 		setIsRecording(true)
 		setProgress(0)
 		dataRef.current = []
 		startTimeRef.current = performance.now()
-		
-		// Process frames at 30 FPS
 		intervalRef.current = setInterval(processFrame, 33)
+		setFingerPresent(false)
+		setSignalQuality('unknown')
 		
 		// Stop after 30 seconds
 		setTimeout(() => {
@@ -286,6 +288,15 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 		setStatus('Analyzing...')
 		
 		setTimeout(() => {
+			// Gate: require visible finger and some signal quality
+			const finalSignalQuality = evaluateSignalQuality()
+			const hasFinger = fingerPresent
+			if (!hasFinger || finalSignalQuality === 'poor' || dataRef.current.length < 60) {
+				setStatus('No finger detected or weak signal. Try again with better placement.')
+				cleanup()
+				return
+			}
+
 			const detectedHR = calculateHeartRate()
 			
 			if (detectedHR) {
@@ -296,7 +307,7 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 					onHeartRateDetected(detectedHR)
 				}
 			} else {
-				setStatus('Could not detect heart rate. Try simulation mode or improve finger placement.')
+				setStatus('Could not detect heart rate. Ensure finger fully covers camera + torch.')
 			}
 			
 			cleanup()
@@ -331,7 +342,7 @@ const WorkingHeartRate = ({ onHeartRateDetected }) => {
 					{isRecording && (
 						<div className="absolute top-2 left-2 right-2">
 							<div className="bg-red-500/80 text-white px-3 py-1 rounded text-center">
-								💓 {status}
+								{fingerPresent ? `💓 Measuring... Signal: ${signalQuality}` : 'Place finger on camera + torch'}
 							</div>
 							<div className="mt-2 bg-black/50 rounded">
 								<div 
