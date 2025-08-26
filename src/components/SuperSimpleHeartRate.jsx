@@ -249,10 +249,11 @@ const SuperSimpleHeartRate = ({ onHeartRateDetected }) => {
 
     if (heartRate) {
       console.log('✅ Heart rate detected:', heartRate, 'BPM using', method)
+      const confidence = variation > 20 ? 'High' : variation > 10 ? 'Medium' : variation > 5 ? 'Low' : 'Very Low'
       setResult(`✅ Heart Rate: ${heartRate} BPM
 
       📊 Detection Details:
-      • Method: ${confidence}
+      • Confidence: ${confidence}
       • Algorithm: ${method}
       • Signal variation: ${variation.toFixed(1)}
       • Data points: ${data.length}

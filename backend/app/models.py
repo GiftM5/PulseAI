@@ -138,3 +138,19 @@ class AlertConfiguration(BaseModel):
     hrv_min: int = Field(default=20, ge=5, le=40)
     enable_trend_alerts: bool = Field(default=True)
     alert_cooldown_minutes: int = Field(default=5, ge=1, le=60)
+
+class CameraHeartRateInput(BaseModel):
+    """Incoming camera heart rate reading from the web app"""
+    heart_rate: int = Field(..., ge=30, le=220)
+    method: Optional[str] = Field(default=None, description="Detection algorithm identifier")
+    signal_quality: Optional[str] = Field(default=None, description="Qualitative signal quality")
+    device: Optional[str] = Field(default=None, description="Device info or user agent")
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+class CameraHeartRateReading(BaseModel):
+    """Stored/served camera heart rate reading"""
+    heart_rate: int
+    method: Optional[str] = None
+    signal_quality: Optional[str] = None
+    device: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.now)

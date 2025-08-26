@@ -509,7 +509,6 @@ const CameraHeartRate = ({ onHeartRateDetected }) => {
           ref={canvasRef}
           className="hidden"
         />
-        <canvas ref={canvasRef} className="w-full h-64 rounded-lg" />
         
         {/* Overlay for finger placement */}
         {isRecording && (
