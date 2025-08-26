@@ -1,5 +1,5 @@
 import React from 'react'
-import { jsPDF } from 'jspdf'
+import jsPDF from 'jspdf'
 
 const ReportButton = ({ vitals, scenarioRef, riskLevel }) => {
 	const generate = () => {
