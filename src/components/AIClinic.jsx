@@ -37,6 +37,37 @@ const AIClinic = () => {
 			})
 	}, [triage, coughDetected])
 
+	const localTriageFallback = () => {
+		let score = 0
+		const coughDays = triage.cough_days ? Number(triage.cough_days) : (coughDetected ? 3 : 0)
+		if (coughDays >= 14) score += 3
+		if (triage.fever) score += 1
+		if (triage.night_sweats) score += 2
+		if (triage.weight_loss) score += 2
+		if (triage.breathlessness) score += 1
+		if (triage.chest_pain) score += 1
+		const txt = (triage.other || '').toLowerCase()
+		if (txt.includes('blood')) score += 2
+		if (txt.includes('hiv')) score += 1
+		// crude flu flag based on cough detection
+		if (coughDetected) score += 1
+		let risk = 'low'
+		if (score >= 6) risk = 'high'
+		else if (score >= 3) risk = 'medium'
+		const recs = []
+		if (coughDetected && risk !== 'high') recs.push('Flu-like cough suspected: rest, hydrate, paracetamol; seek care if worsening.')
+		if (risk === 'high') recs.push('Please visit a clinic for TB screening within 24–48 hours.')
+		else if (risk === 'medium') recs.push('Monitor symptoms and visit a clinic this week if cough persists.')
+		else recs.push('Self-care: rest, hydration, and monitor symptoms.')
+		return {
+			risk_level: risk,
+			score,
+			summary: `Local triage for ${triage.name || 'patient'}: score ${score}, risk ${risk}.`,
+			recommendations: recs,
+			timestamp: Date.now()
+		}
+	}
+
 	const submitTriage = async (e) => {
 		e.preventDefault()
 		setBusy(true); setError('')
@@ -47,14 +78,16 @@ const AIClinic = () => {
 				body: JSON.stringify({
 					...triage,
 					age: triage.age ? Number(triage.age) : undefined,
-					cough_days: triage.cough_days ? Number(triage.cough_days) : (coughDetected ? 3 : 0) // small boost if cough detected
+					cough_days: triage.cough_days ? Number(triage.cough_days) : (coughDetected ? 3 : 0)
 				})
 			})
 			if (!res.ok) throw new Error(`HTTP ${res.status}`)
 			const data = await res.json()
 			setTriageResult(data)
 		} catch (err) {
-			setError(`Triage failed: ${err.message}`)
+			const fallback = localTriageFallback()
+			setTriageResult(fallback)
+			setError(`Triage: backend unavailable, used local scoring (${err.message}).`)
 		} finally {
 			setBusy(false)
 		}
@@ -73,7 +106,18 @@ const AIClinic = () => {
 			const data = await res.json()
 			setLastAppointment(data)
 		} catch (err) {
-			setError(`Booking failed: ${err.message}`)
+			// Local booking fallback
+			const fake = {
+				id: Math.random().toString(36).slice(2, 10),
+				name: appt.name,
+				phone: appt.phone,
+				preferred_time: appt.preferred_time,
+				reason: appt.reason,
+				status: 'booked',
+				created_at: new Date().toISOString()
+			}
+			setLastAppointment(fake)
+			setError(`Booking: backend unavailable, created local ticket (${err.message}).`)
 		} finally {
 			setBusy(false)
 		}
@@ -143,7 +187,7 @@ const AIClinic = () => {
 					</div>
 
 					<CoughCheck onResult={(r) => {
-						setCoughDetected(!!r.coughDetected)
+						setCoughDetected(!!r.coughDetected && !!r.fluLike)
 						if (r.coughDetected && (!triage.cough_days || Number(triage.cough_days) < 1)) {
 							setTriage(prev => ({ ...prev, cough_days: 3 }))
 						}
@@ -168,7 +212,7 @@ const AIClinic = () => {
 				<div>
 					<ReportButton vitals={triageResult ? { heartRate: 0, spo2: 0, hrv: 0, timestamp: Date.now() } : null} scenarioRef={{ current: 'ai-clinic-triage' }} riskLevel={triageResult?.risk_level || 'low'} />
 				</div>
-				{error && <div className="text-red-400 text-sm">{error}</div>}
+				{error && <div className="text-yellow-400 text-sm">{error}</div>}
 			</div>
 		</div>
 	)

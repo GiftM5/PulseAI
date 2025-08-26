@@ -325,12 +325,15 @@ async def triage(input: TriageInput):
         if input.chest_pain: score += 1
         if (input.other or '').lower().find('blood') >= 0: score += 2
         if (input.other or '').lower().find('hiv') >= 0: score += 1
+        if input.flu_like: score += 1  # slight bump for flu-like cough
 
         risk_level = RiskLevel.LOW
         if score >= 6: risk_level = RiskLevel.HIGH
         elif score >= 3: risk_level = RiskLevel.MEDIUM
 
         recommendations = []
+        if input.flu_like and risk_level != RiskLevel.HIGH:
+            recommendations.append("Flu-like cough detected: consider rest, hydration, paracetamol; seek care if worsening.")
         if risk_level == RiskLevel.HIGH:
             recommendations.append("Please visit a clinic for TB screening within 24–48 hours.")
         elif risk_level == RiskLevel.MEDIUM:

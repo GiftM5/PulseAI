@@ -167,6 +167,7 @@ class TriageInput(BaseModel):
     breathlessness: Optional[bool] = Field(default=False)
     chest_pain: Optional[bool] = Field(default=False)
     other: Optional[str] = None
+    flu_like: Optional[bool] = Field(default=False, description="Flag from cough classifier suggesting flu-like cough")
 
 class TriageResult(BaseModel):
     risk_level: RiskLevel
