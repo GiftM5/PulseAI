@@ -6,12 +6,14 @@ import RiskAlert from './components/RiskAlert'
 import WorkingHeartRate from './components/WorkingHeartRate'
 import SimulationControls from './components/SimulationControls'
 import RespiratoryRateSimulator from './components/RespiratoryRateSimulator'
+import AutoDemoControls from './components/AutoDemoControls'
+import ReportButton from './components/ReportButton'
 import { useVitalsData } from './hooks/useVitalsData'
 
 function App() {
   const [currentView, setCurrentView] = useState('landing')
   const [realHeartRate, setRealHeartRate] = useState(null)
-  const { vitalsData, riskLevel, isLoading, updateVitalsFromCamera, triggerScenario, resetScenario } = useVitalsData()
+  const { vitalsData, riskLevel, isLoading, updateVitalsFromCamera, triggerScenario, resetScenario, currentScenario } = useVitalsData()
 
   const handleHeartRateDetected = (heartRate) => {
     setRealHeartRate(heartRate)
@@ -59,6 +61,17 @@ function App() {
                   onLowSpO2={(sec) => triggerScenario('low_spo2', sec)}
                   onReset={() => resetScenario()}
                 />
+
+                {/* Auto Demo */}
+                <AutoDemoControls
+                  onTrigger={(scenario, sec) => triggerScenario(scenario, sec)}
+                  onReset={() => resetScenario()}
+                />
+
+                {/* Report Export */}
+                <div>
+                  <ReportButton vitals={vitalsData} scenarioRef={currentScenario} riskLevel={riskLevel} />
+                </div>
               </div>
 
               {/* Chart + Breathing */}

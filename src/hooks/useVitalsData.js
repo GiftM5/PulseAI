@@ -291,6 +291,7 @@ export const useVitalsData = () => {
 		updateVitalsFromCamera,
 		isMonitoring: !!intervalRef.current,
 		triggerScenario,
-		resetScenario
+		resetScenario,
+		currentScenario: currentScenarioRef
 	}
 }
