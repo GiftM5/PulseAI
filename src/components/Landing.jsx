@@ -2,7 +2,7 @@ import React from 'react'
 import { motion } from 'framer-motion'
 import { Heart, Activity, Zap, Smartphone, Brain, Shield } from 'lucide-react'
 
-const Landing = ({ onGetStarted, onOpenClinic }) => {
+const Landing = ({ onGetStarted, onOpenClinic, onOpenLearn, onOpenLogin }) => {
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -142,6 +142,24 @@ const Landing = ({ onGetStarted, onOpenClinic }) => {
               whileTap={{ scale: 0.95 }}
             >
               Enter AI Clinic
+            </motion.button>
+
+            <motion.button
+              onClick={onOpenLearn}
+              className="glass-card px-8 py-4 rounded-xl text-lg font-semibold text-dark-300 hover:text-white transition-colors"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              Learn More
+            </motion.button>
+
+            <motion.button
+              onClick={onOpenLogin}
+              className="glass-card px-8 py-4 rounded-xl text-lg font-semibold text-yellow-400 hover:text-yellow-300 transition-colors"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              Login
             </motion.button>
           </motion.div>
         </motion.div>

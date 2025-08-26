@@ -7,28 +7,59 @@ const ReportButton = ({ vitals, scenarioRef, riskLevel }) => {
 			const doc = new jsPDF()
 			const now = new Date()
 			doc.setFontSize(18)
-			doc.text('PulseAI Demo Report', 14, 20)
+			doc.text('AI Clinic Booking Slip', 14, 20)
 			doc.setFontSize(11)
 			doc.text(`Generated: ${now.toLocaleString()}`, 14, 28)
-			doc.text(`Scenario: ${scenarioRef?.current || 'none'}`, 14, 36)
+			doc.text(`Scenario: ${scenarioRef?.current || 'ai-clinic'}`, 14, 36)
 			doc.text(`Risk: ${riskLevel}`, 14, 44)
 			doc.setDrawColor(200)
 			doc.line(14, 48, 196, 48)
 
+			let y = 60
 			doc.setFontSize(14)
-			doc.text('Vitals', 14, 60)
+			doc.text('Booking Details', 14, y); y += 8
 			doc.setFontSize(12)
-			doc.text(`Heart Rate: ${vitals?.heartRate ?? '-'} BPM`, 14, 70)
-			doc.text(`SpO₂: ${vitals?.spo2 ?? '-'} %`, 14, 78)
-			doc.text(`HRV: ${vitals?.hrv ?? '-'} ms`, 14, 86)
-			doc.text(`Timestamp: ${vitals?.timestamp ? new Date(vitals.timestamp).toLocaleString() : now.toLocaleString()}`, 14, 94)
+			const ap = vitals?.appointment
+			if (ap) {
+				doc.text(`Ticket ID: ${ap.id || '-'}`, 14, y); y += 8
+				doc.text(`Name: ${ap.name || '-'}`, 14, y); y += 8
+				doc.text(`Phone: ${ap.phone || '-'}`, 14, y); y += 8
+				doc.text(`Preferred time: ${ap.preferred_time || '-'}`, 14, y); y += 8
+				doc.text(`Reason: ${ap.reason || '-'}`, 14, y); y += 8
+				doc.text(`Clinic: ${ap.clinic || '-'}`, 14, y); y += 8
+				if (ap.directions) { doc.text(`Directions: ${ap.directions}`, 14, y, { maxWidth: 180 }); y += 8 }
+			} else {
+				doc.text('No booking found.', 14, y); y += 8
+			}
 
 			doc.setFontSize(14)
-			doc.text('Notes', 14, 110)
-			doc.setFontSize(11)
-			doc.text('This report summarizes the current simulated vitals and scenario for demo purposes.', 14, 120, { maxWidth: 180 })
+			doc.text('Symptom Check', 14, y); y += 8
+			doc.setFontSize(12)
+			const tr = vitals?.triageResult
+			if (tr) {
+				doc.text(`Risk: ${tr.risk_level} (score ${tr.score})`, 14, y); y += 8
+				doc.text(`Summary: ${tr.summary}`, 14, y, { maxWidth: 180 }); y += 8
+				if (tr.recommendations?.length) {
+					doc.text('Recommendations:', 14, y); y += 8
+					tr.recommendations.forEach((r) => { doc.text(`• ${r}`, 18, y, { maxWidth: 176 }); y += 6 })
+				}
+			} else {
+				doc.text('No symptom check available.', 14, y); y += 8
+			}
 
-			doc.save(`PulseAI_Report_${now.getTime()}.pdf`)
+			doc.setFontSize(14)
+			doc.text('Cough Check', 14, y); y += 8
+			doc.setFontSize(12)
+			if (vitals?.coughDetected) {
+				doc.text('Cough: Detected (flu-like)', 14, y); y += 8
+			} else {
+				doc.text('Cough: Not detected or not flu-like', 14, y); y += 8
+			}
+
+			// Footer
+			doc.setFontSize(10)
+			doc.text('Not a diagnosis. Present this slip at the clinic. Seek urgent care for severe symptoms.', 14, 285, { maxWidth: 180 })
+			doc.save(`AIClinic_Slip_${now.getTime()}.pdf`)
 		} catch (e) {
 			console.error('Failed to generate PDF:', e)
 		}

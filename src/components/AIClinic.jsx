@@ -14,11 +14,13 @@ const mockClinics = [
 const AIClinic = () => {
 	const [triage, setTriage] = useState({ name: '', age: '', language: 'en', cough_days: 0, fever: false, night_sweats: false, weight_loss: false, breathlessness: false, chest_pain: false, other: '' })
 	const [triageResult, setTriageResult] = useState(null)
-	const [appt, setAppt] = useState({ name: '', phone: '', id_number: '', preferred_time: '', reason: '' })
+	const [appt, setAppt] = useState({ name: '', phone: '', id_number: '', preferred_time: '', reason: '', clinic_id: 'cl1' })
 	const [lastAppointment, setLastAppointment] = useState(null)
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState('')
 	const [coughDetected, setCoughDetected] = useState(false)
+
+	const selectedClinic = useMemo(() => mockClinics.find(c => c.id === appt.clinic_id) || mockClinics[0], [appt.clinic_id])
 
 	const rankedClinics = useMemo(() => {
 		const tbConcern = ((triage.cough_days || 0) >= 14) || triage.night_sweats || triage.weight_loss || coughDetected
@@ -49,7 +51,6 @@ const AIClinic = () => {
 		const txt = (triage.other || '').toLowerCase()
 		if (txt.includes('blood')) score += 2
 		if (txt.includes('hiv')) score += 1
-		// crude flu flag based on cough detection
 		if (coughDetected) score += 1
 		let risk = 'low'
 		if (score >= 6) risk = 'high'
@@ -66,6 +67,13 @@ const AIClinic = () => {
 			recommendations: recs,
 			timestamp: Date.now()
 		}
+	}
+
+	const validateReception = () => {
+		if (!appt.name) return 'Name is required'
+		if (appt.phone && !/^\d{10}$/.test(appt.phone)) return 'Phone must be 10 digits (SA)'
+		if (appt.id_number && !/^\d{13}$/.test(appt.id_number)) return 'ID number must be 13 digits'
+		return ''
 	}
 
 	const submitTriage = async (e) => {
@@ -95,18 +103,20 @@ const AIClinic = () => {
 
 	const submitAppointment = async (e) => {
 		e.preventDefault()
+		const v = validateReception()
+		if (v) { setError(v); return }
 		setBusy(true); setError('')
+		const directions = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedClinic.name)}`
 		try {
 			const res = await fetch(`${apiBase}/api/clinic/appointments`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(appt)
+				body: JSON.stringify({ name: appt.name, phone: appt.phone, id_number: appt.id_number, preferred_time: appt.preferred_time, reason: appt.reason })
 			})
 			if (!res.ok) throw new Error(`HTTP ${res.status}`)
 			const data = await res.json()
-			setLastAppointment(data)
+			setLastAppointment({ ...data, clinic: selectedClinic.name, directions })
 		} catch (err) {
-			// Local booking fallback
 			const fake = {
 				id: Math.random().toString(36).slice(2, 10),
 				name: appt.name,
@@ -114,7 +124,9 @@ const AIClinic = () => {
 				preferred_time: appt.preferred_time,
 				reason: appt.reason,
 				status: 'booked',
-				created_at: new Date().toISOString()
+				created_at: new Date().toISOString(),
+				clinic: selectedClinic.name,
+				directions
 			}
 			setLastAppointment(fake)
 			setError(`Booking: backend unavailable, created local ticket (${err.message}).`)
@@ -128,6 +140,7 @@ const AIClinic = () => {
 			<div className="glass-card p-6 rounded-xl">
 				<h2 className="text-2xl font-semibold text-white">🏥 AI Clinic</h2>
 				<p className="text-dark-300 text-sm mt-1">Reception, AI triage, clinic navigation — now with Cough Check.</p>
+				<div className="text-xs text-dark-400 mt-2">We guide you to care. Not a diagnosis. Your checks run on-device; only bookings are sent.</div>
 			</div>
 
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -136,21 +149,25 @@ const AIClinic = () => {
 					<h3 className="text-xl font-semibold text-white">🧾 Reception</h3>
 					<form onSubmit={submitAppointment} className="space-y-3">
 						<input className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="Full name" value={appt.name} onChange={e => setAppt({ ...appt, name: e.target.value })} required />
-						<input className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="Phone (optional)" value={appt.phone} onChange={e => setAppt({ ...appt, phone: e.target.value })} />
-						<input className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="ID number (optional)" value={appt.id_number} onChange={e => setAppt({ ...appt, id_number: e.target.value })} />
+						<input className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="SA phone (10 digits)" value={appt.phone} onChange={e => setAppt({ ...appt, phone: e.target.value })} />
+						<input className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="ID number (13 digits)" value={appt.id_number} onChange={e => setAppt({ ...appt, id_number: e.target.value })} />
 						<input className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="Preferred time (e.g., 10:30)" value={appt.preferred_time} onChange={e => setAppt({ ...appt, preferred_time: e.target.value })} />
 						<input className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="Reason (optional)" value={appt.reason} onChange={e => setAppt({ ...appt, reason: e.target.value })} />
+						<select className="w-full bg-dark-800 text-white px-3 py-2 rounded" value={appt.clinic_id} onChange={e => setAppt({ ...appt, clinic_id: e.target.value })}>
+							{mockClinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+						</select>
 						<button disabled={busy} className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded">Book Appointment</button>
 					</form>
 					{lastAppointment && (
-						<div className="text-sm text-green-400">Booked #{lastAppointment.id} at {lastAppointment.preferred_time || 'next available'} for {lastAppointment.name}</div>
+						<div className="text-sm text-green-400">Booked #{lastAppointment.id} at {lastAppointment.preferred_time || 'next available'} for {lastAppointment.name} • <a href={lastAppointment.directions} target="_blank" rel="noreferrer" className="text-primary-400">Directions</a></div>
 					)}
+					{error && <div className="text-yellow-400 text-sm">{error}</div>}
 				</div>
 
 				{/* Triage + Cough */}
 				<div className="space-y-6">
 					<div className="glass-card p-6 rounded-xl space-y-4">
-						<h3 className="text-xl font-semibold text-white">🤖 AI Triage</h3>
+						<h3 className="text-xl font-semibold text-white">🤖 Symptom Checker</h3>
 						<form onSubmit={submitTriage} className="space-y-3">
 							<div className="grid grid-cols-2 gap-3">
 								<input className="bg-dark-800 text-white px-3 py-2 rounded" placeholder="Name" value={triage.name} onChange={e => setTriage({ ...triage, name: e.target.value })} />
@@ -173,7 +190,7 @@ const AIClinic = () => {
 								<label className="flex items-center gap-2"><input type="checkbox" checked={triage.chest_pain} onChange={e => setTriage({ ...triage, chest_pain: e.target.checked })} /> Chest pain</label>
 							</div>
 							<textarea className="w-full bg-dark-800 text-white px-3 py-2 rounded" placeholder="Other symptoms (optional)" rows={2} value={triage.other} onChange={e => setTriage({ ...triage, other: e.target.value })} />
-							<button disabled={busy} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Run Triage</button>
+							<button disabled={busy} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Run Check</button>
 						</form>
 						{triageResult && (
 							<div className="bg-dark-800/50 rounded p-3 text-sm">
@@ -210,9 +227,8 @@ const AIClinic = () => {
 					))}
 				</div>
 				<div>
-					<ReportButton vitals={triageResult ? { heartRate: 0, spo2: 0, hrv: 0, timestamp: Date.now() } : null} scenarioRef={{ current: 'ai-clinic-triage' }} riskLevel={triageResult?.risk_level || 'low'} />
+					<ReportButton vitals={triageResult ? { heartRate: 0, spo2: 0, hrv: 0, timestamp: Date.now(), triageResult, appointment: lastAppointment, coughDetected } : null} scenarioRef={{ current: 'ai-clinic' }} riskLevel={triageResult?.risk_level || 'low'} />
 				</div>
-				{error && <div className="text-yellow-400 text-sm">{error}</div>}
 			</div>
 		</div>
 	)

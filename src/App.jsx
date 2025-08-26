@@ -10,17 +10,19 @@ import AutoDemoControls from './components/AutoDemoControls'
 import ReportButton from './components/ReportButton'
 import ErrorBoundary from './components/ErrorBoundary'
 import AIClinic from './components/AIClinic'
+import LearnMore from './components/LearnMore'
+import Login from './components/Login'
 import { useVitalsData } from './hooks/useVitalsData'
 
 function App() {
   const [currentView, setCurrentView] = useState('landing')
   const [realHeartRate, setRealHeartRate] = useState(null)
+  const [user, setUser] = useState(null)
   const { vitalsData, riskLevel, isLoading, updateVitalsFromCamera, triggerScenario, resetScenario, currentScenario } = useVitalsData()
 
   const handleHeartRateDetected = (heartRate) => {
     setRealHeartRate(heartRate)
     updateVitalsFromCamera(heartRate)
-    console.log('Real heart rate detected:', heartRate)
   }
 
   return (
@@ -33,17 +35,33 @@ function App() {
         {currentView === 'landing' && (
           <Landing onGetStarted={() => setCurrentView('dashboard')} onOpenClinic={() => setCurrentView('clinic')} />
         )}
+
+        {currentView === 'learn' && (
+          <ErrorBoundary>
+            <LearnMore onBack={() => setCurrentView('landing')} />
+          </ErrorBoundary>
+        )}
+
+        {currentView === 'login' && (
+          <ErrorBoundary>
+            <Login onLogin={(u) => { setUser(u); setCurrentView('clinic') }} onBack={() => setCurrentView('landing')} />
+          </ErrorBoundary>
+        )}
         
         {currentView === 'clinic' && (
           <ErrorBoundary>
             <div className="space-y-8">
-              <div className="text-center space-y-4">
-                <h1 className="text-4xl font-bold neon-text">AI Clinic</h1>
-                <p className="text-dark-300 text-lg max-w-2xl mx-auto">Digital reception, triage and navigation</p>
+              <div className="flex items-center justify-between">
+                <div className="text-center space-y-1">
+                  <h1 className="text-4xl font-bold neon-text">AI Clinic</h1>
+                  <p className="text-dark-300 text-sm">Digital reception, symptom checking and navigation</p>
+                </div>
+                <div className="text-xs text-dark-300">{user ? `Logged in: ${user.phone}` : <button className="text-primary-400" onClick={() => setCurrentView('login')}>Login</button>}</div>
               </div>
               <AIClinic />
-              <div className="flex justify-center mt-8">
-                <button onClick={() => setCurrentView('landing')} className="glass-card px-6 py-3 rounded-lg hover-glow transition-all duration-300 text-primary-400 hover:text-primary-300">← Back</button>
+              <div className="flex justify-center mt-8 gap-3">
+                <button onClick={() => setCurrentView('landing')} className="glass-card px-6 py-3 rounded-lg text-primary-400">← Home</button>
+                <button onClick={() => setCurrentView('learn')} className="glass-card px-6 py-3 rounded-lg text-green-400">Learn More</button>
               </div>
             </div>
           </ErrorBoundary>
@@ -76,8 +94,10 @@ function App() {
                   <RespiratoryRateSimulator />
                 </div>
               </div>
-              <div className="flex justify-center mt-12">
-                <button onClick={() => setCurrentView('landing')} className="glass-card px-6 py-3 rounded-lg hover-glow transition-all duration-300 text-primary-400 hover:text-primary-300">← Back to Home</button>
+              <div className="flex justify-center mt-12 gap-3">
+                <button onClick={() => setCurrentView('landing')} className="glass-card px-6 py-3 rounded-lg text-primary-400">← Home</button>
+                <button onClick={() => setCurrentView('learn')} className="glass-card px-6 py-3 rounded-lg text-green-400">Learn More</button>
+                <button onClick={() => setCurrentView('clinic')} className="glass-card px-6 py-3 rounded-lg text-yellow-400">Enter AI Clinic</button>
               </div>
             </div>
           </ErrorBoundary>
