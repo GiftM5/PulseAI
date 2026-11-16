@@ -12,14 +12,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+CERT_DIR = ROOT / 'certs'
+CERT_FILE = CERT_DIR / 'cert.pem'
+KEY_FILE = CERT_DIR / 'key.pem'
+
 def create_self_signed_cert():
     """Create a self-signed certificate for HTTPS"""
     print("Creating self-signed certificate...")
     
+    CERT_DIR.mkdir(exist_ok=True)
+
     # Create certificate using openssl
     cmd = [
-        'openssl', 'req', '-x509', '-newkey', 'rsa:4096', '-keyout', 'key.pem', 
-        '-out', 'cert.pem', '-days', '365', '-nodes', '-subj', 
+        'openssl', 'req', '-x509', '-newkey', 'rsa:4096', '-keyout', str(KEY_FILE), 
+        '-out', str(CERT_FILE), '-days', '365', '-nodes', '-subj', 
         '/C=US/ST=State/L=City/O=Organization/CN=192.168.0.174'
     ]
     
@@ -38,7 +45,7 @@ def build_react_app():
     """Build the React app for production"""
     print("Building React app...")
     try:
-        subprocess.run(['npm', 'run', 'build'], check=True, cwd='.')
+        subprocess.run(['npm', 'run', 'build'], check=True, cwd=ROOT)
         print("✅ React app built successfully!")
         return True
     except subprocess.CalledProcessError as e:
@@ -50,8 +57,9 @@ def start_https_server():
     PORT = 3443  # Use different port for HTTPS
     
     # Change to dist directory (where Vite builds the app)
-    if os.path.exists('dist'):
-        os.chdir('dist')
+    dist_dir = ROOT / 'dist'
+    if dist_dir.exists():
+        os.chdir(dist_dir)
         print(f"📁 Serving from: {os.getcwd()}")
     else:
         print("❌ dist folder not found. Make sure to build the app first.")
@@ -63,7 +71,7 @@ def start_https_server():
     with socketserver.TCPServer(("0.0.0.0", PORT), Handler) as httpd:
         # Wrap with SSL
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain('../cert.pem', '../key.pem')
+        context.load_cert_chain(str(CERT_FILE), str(KEY_FILE))
         httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
         
         print(f"🚀 HTTPS Server running on:")

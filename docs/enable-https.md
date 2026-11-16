@@ -19,9 +19,10 @@ npm install -g mkcert
 # Create certificates
 mkcert create-ca
 mkcert create-cert --domains localhost,192.168.0.174
+# Move the generated cert.pem / key.pem into ./certs/ (git-ignored)
 
 # Start with certificates
-npm run dev -- --https --cert ./cert.pem --key ./key.pem --host 0.0.0.0
+npm run dev -- --https --cert ./certs/cert.pem --key ./certs/key.pem --host 0.0.0.0
 ```
 
 ### Option 3: Ngrok (Easiest)

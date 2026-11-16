@@ -9,16 +9,23 @@ import socketserver
 import os
 import subprocess
 import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CERT_DIR = ROOT / 'certs'
+CERT_FILE = CERT_DIR / 'cert.pem'
+KEY_FILE = CERT_DIR / 'key.pem'
 
 def create_cert():
     """Create self-signed certificate"""
     print("🔒 Creating self-signed certificate...")
     
+    CERT_DIR.mkdir(exist_ok=True)
     try:
         # Create certificate
         subprocess.run([
-            'openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-keyout', 'key.pem', 
-            '-out', 'cert.pem', '-days', '30', '-nodes', '-subj', 
+            'openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-keyout', str(KEY_FILE), 
+            '-out', str(CERT_FILE), '-days', '30', '-nodes', '-subj', 
             '/C=US/ST=State/L=City/O=PulseAI/CN=192.168.0.174'
         ], check=True, capture_output=True)
         
@@ -33,8 +40,9 @@ def start_https_server():
     PORT = 8443
     
     # Change to dist directory
-    if os.path.exists('dist'):
-        os.chdir('dist')
+    dist_dir = ROOT / 'dist'
+    if dist_dir.exists():
+        os.chdir(dist_dir)
         print(f"📁 Serving from: {os.getcwd()}")
     else:
         print("❌ dist folder not found!")
@@ -46,7 +54,7 @@ def start_https_server():
     with socketserver.TCPServer(("0.0.0.0", PORT), Handler) as httpd:
         # Add SSL
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain('../cert.pem', '../key.pem')
+        context.load_cert_chain(str(CERT_FILE), str(KEY_FILE))
         httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
         
         print(f"""
