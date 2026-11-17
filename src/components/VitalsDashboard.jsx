@@ -25,44 +25,40 @@ const VitalsDashboard = ({ vitalsData, isLoading }) => {
   }
 
   const getStatusColor = (value, type) => {
-    if (!value) return 'text-dark-400'
-    
+    if (!value) return 'text-dark-500'
     switch (type) {
       case 'heartRate':
-        if (value < 60 || value > 100) return 'text-danger-500'
-        if (value < 70 || value > 90) return 'text-yellow-500'
-        return 'text-primary-500'
+        if (value < 60 || value > 100) return 'text-danger-400'
+        if (value < 70 || value > 90) return 'text-yellow-400'
+        return 'text-white'
       case 'spo2':
-        if (value < 95) return 'text-danger-500'
-        if (value < 98) return 'text-yellow-500'
-        return 'text-primary-500'
+        if (value < 95) return 'text-danger-400'
+        if (value < 98) return 'text-yellow-400'
+        return 'text-white'
       case 'hrv':
-        if (value < 20) return 'text-danger-500'
-        if (value < 30) return 'text-yellow-500'
-        return 'text-primary-500'
-      default:
-        return 'text-primary-500'
+        if (value < 20) return 'text-danger-400'
+        if (value < 30) return 'text-yellow-400'
+        return 'text-white'
+      default: return 'text-white'
     }
   }
 
   const getStatusBorder = (value, type) => {
-    if (!value) return 'border-dark-700'
-    
+    if (!value) return ''
     switch (type) {
       case 'heartRate':
-        if (value < 60 || value > 100) return 'border-danger-500/50'
-        if (value < 70 || value > 90) return 'border-yellow-500/50'
-        return 'border-primary-500/50'
+        if (value < 60 || value > 100) return 'border-danger-500/40'
+        if (value < 70 || value > 90) return 'border-yellow-500/40'
+        return ''
       case 'spo2':
-        if (value < 95) return 'border-danger-500/50'
-        if (value < 98) return 'border-yellow-500/50'
-        return 'border-primary-500/50'
+        if (value < 95) return 'border-danger-500/40'
+        if (value < 98) return 'border-yellow-500/40'
+        return ''
       case 'hrv':
-        if (value < 20) return 'border-danger-500/50'
-        if (value < 30) return 'border-yellow-500/50'
-        return 'border-primary-500/50'
-      default:
-        return 'border-primary-500/50'
+        if (value < 20) return 'border-danger-500/40'
+        if (value < 30) return 'border-yellow-500/40'
+        return ''
+      default: return ''
     }
   }
 
@@ -116,13 +112,13 @@ const VitalsDashboard = ({ vitalsData, isLoading }) => {
         {vitals.map((vital) => (
           <motion.div
             key={vital.id}
-            className={`glass-card p-6 rounded-xl hover-glow group transition-all duration-300 ${getStatusBorder(vital.value, vital.id)}`}
+            className={`glass-card-hover p-6 rounded-xl group border ${getStatusBorder(vital.value, vital.id) || 'border-white/5'}`}
             variants={cardVariants}
-            whileHover={{ y: -5, scale: 1.02 }}
+            whileHover={{ y: -4 }}
           >
             <div className="flex items-start justify-between mb-4">
-              <div className={`p-3 rounded-lg bg-gradient-to-br from-dark-700 to-dark-800 group-hover:from-dark-600 group-hover:to-dark-700 transition-all duration-300`}>
-                <vital.icon className={`w-6 h-6 ${getStatusColor(vital.value, vital.id)}`} />
+              <div className="p-2.5 rounded-lg bg-white/5 group-hover:bg-white/10 transition-colors duration-300">
+                <vital.icon className={`w-5 h-5 ${getStatusColor(vital.value, vital.id)}`} />
               </div>
               <div className="flex items-center space-x-1">
                 {getTrendIcon(vital.trend)}
@@ -133,39 +129,28 @@ const VitalsDashboard = ({ vitalsData, isLoading }) => {
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-dark-300">
+              <h3 className="text-xs font-medium text-dark-400 uppercase tracking-wider">
                 {vital.title}
               </h3>
-              
-              <div className="flex items-baseline space-x-2">
+              <div className="flex items-baseline gap-1.5">
                 {isLoading ? (
-                  <div className="animate-pulse">
-                    <div className="h-8 w-16 bg-dark-700 rounded"></div>
-                  </div>
+                  <div className="h-9 w-16 bg-dark-800 rounded animate-pulse" />
                 ) : (
                   <motion.span
-                    className={`text-3xl font-bold ${getStatusColor(vital.value, vital.id)}`}
+                    className={`text-4xl font-bold tracking-tight ${getStatusColor(vital.value, vital.id)}`}
                     key={vital.value}
-                    initial={{ scale: 1.2, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ duration: 0.3 }}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.25 }}
                   >
                     {vital.value}
                   </motion.span>
                 )}
-                <span className="text-sm text-dark-400 font-medium">
-                  {vital.unit}
-                </span>
+                <span className="text-sm text-dark-500 font-medium">{vital.unit}</span>
               </div>
-
-              <p className="text-xs text-dark-400 leading-relaxed">
-                {vital.description}
-              </p>
-              
-              <div className="pt-2 border-t border-dark-700/50">
-                <p className="text-xs text-dark-500">
-                  Normal: {vital.normalRange}
-                </p>
+              <p className="text-xs text-dark-500">{vital.description}</p>
+              <div className="pt-2 border-t border-white/5">
+                <p className="text-xs text-dark-600">Normal: {vital.normalRange}</p>
               </div>
             </div>
 
@@ -191,20 +176,15 @@ const VitalsDashboard = ({ vitalsData, isLoading }) => {
       </div>
 
       {/* Status Summary */}
-      <motion.div
-        className="glass-card p-4 rounded-xl"
-        variants={cardVariants}
-      >
+      <motion.div className="glass-card p-4 rounded-xl" variants={cardVariants}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-3 h-3 bg-primary-500 rounded-full animate-pulse"></div>
+          <div className="flex items-center gap-2.5">
+            <div className="status-dot" />
             <span className="text-sm font-medium text-white">
               {isLoading ? 'Collecting data...' : 'Monitoring active'}
             </span>
           </div>
-          <div className="text-xs text-dark-400">
-            Last updated: {new Date().toLocaleTimeString()}
-          </div>
+          <span className="text-xs text-dark-500">Updated {new Date().toLocaleTimeString()}</span>
         </div>
       </motion.div>
     </motion.div>
